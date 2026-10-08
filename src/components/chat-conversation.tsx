@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { ApiError } from "@/lib/api";
 import type { ChatSession } from "@/lib/chat-session";
-type ClientMessage = { clientMessageId: string; question: string };
+import { createClientMessage, type ClientMessage } from "@/lib/client-message";
 import { chatErrorMessage, sendChatStream, type ChatReply, type ChatStage } from "@/lib/chat-stream";
 import ChatIcon from "./chat-icon";
 
@@ -25,6 +25,7 @@ export default function ChatConversation({ session, onNewConversation }: { sessi
   const endRef = useRef<HTMLDivElement>(null);
   const activeTurnRef = useRef<HTMLDivElement>(null);
   const activeRequest = useRef<AbortController | null>(null);
+  const retryMessage = useRef<ClientMessage | null>(null);
   const followLatest = useRef(true);
   const hasConversation = turns.length > 0;
 
@@ -41,8 +42,9 @@ export default function ChatConversation({ session, onNewConversation }: { sessi
     if (!question || question.length > 1000 || activeRequest.current || mustReenter) return;
     const controller = new AbortController();
     activeRequest.current = controller;
-    const outgoing = { clientMessageId: retry?.clientMessageId ?? crypto.randomUUID(), question };
+    const outgoing = createClientMessage(question, retry ?? retryMessage.current);
     const id = outgoing.clientMessageId;
+    retryMessage.current = null;
     const updateTurn = (change: Partial<Turn>) => setTurns((current) => current.map((turn) => turn.id === id ? { ...turn, ...change } : turn));
     followLatest.current = true;
     setTurns((current) => {
@@ -70,6 +72,7 @@ export default function ChatConversation({ session, onNewConversation }: { sessi
       updateTurn({ reply, provisional: "" });
     } catch (error) {
       updateTurn({ provisional: "", error: controller.signal.aborted ? "답변 생성을 중지했습니다." : chatErrorMessage(error) });
+      retryMessage.current = outgoing;
       setDraft(question);
       if (error instanceof ApiError && ["UNAUTHENTICATED", "INVITATION_UNAVAILABLE", "ACCESS_DENIED", "CHAT_MESSAGE_ID_CONFLICT"].includes(error.code)) {
         setMustReenter(true);

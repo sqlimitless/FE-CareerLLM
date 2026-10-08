@@ -12,6 +12,7 @@ const { prepareChatSession, readInvitationCode } = load('../src/lib/chat-session
 const { sendChatStream, chatErrorMessage } = load('../src/lib/chat-stream.ts');
 const { ApiError } = load('../src/lib/api.ts');
 const { apiGet } = load('../src/lib/api.ts');
+const { createClientMessage } = load('../src/lib/client-message.ts');
 const clientMessageId = '019a37ec-0000-7000-8000-000000000001';
 const invite = { inviteId: 'invite', companyName: '예시회사', position: '백엔드 개발자', firstUsedAt: null, expiresAt: '2027-01-02', canStartConversation: true };
 const visitor = { ...invite, visitorId: 'visitor', firstUsedAt: '2026-10-07', welcomeMessage: '환영합니다' };
@@ -110,6 +111,35 @@ test('chat API and SSE contracts', async (t) => {
       }, cancel() { cancelled = true; } }), { headers: { 'Content-Type': 'text/event-stream' } });
       await assert.rejects(send(() => controller.abort(), controller.signal), e => e.name === 'AbortError');
       assert.equal(cancelled, true);
+    });
+    await t.test('new question IDs differ, retries reuse ID, edited questions get a fresh ID', async () => {
+      const first = createClientMessage('  프로젝트 경험은?  ');
+      const retry = createClientMessage('프로젝트 경험은?', first);
+      assert.equal(retry.clientMessageId, first.clientMessageId);
+      assert.equal(retry.question, first.question);
+      assert.notEqual(createClientMessage('기술 선택은?', first).clientMessageId, first.clientMessageId);
+      assert.notEqual(createClientMessage('프로젝트 경험은?').clientMessageId, first.clientMessageId);
+      assert.match(first.clientMessageId, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
+    });
+    await t.test('disconnected question is resent with the same ID and receives cached completion', async () => {
+      const bodies = [];
+      global.fetch = async (_url, options) => {
+        bodies.push(JSON.parse(options.body));
+        return bodies.length === 1 ? stream(frame('delta', { text: 'lost completion' })) : stream(frame('completed', reply));
+      };
+      const original = createClientMessage('경험을 알려 주세요');
+      const attempt = (message) => sendChatStream({ message: message.question, clientMessageId: message.clientMessageId, csrf, signal: signal(), onEvent() {} });
+      await assert.rejects(attempt(original), e => e.code === 'CHAT_STREAM_INTERRUPTED');
+      assert.equal(bodies.length, 1);
+      assert.deepEqual(await attempt(createClientMessage(original.question, original)), reply);
+      assert.deepEqual(bodies[0], bodies[1]);
+      assert.equal(bodies.length, 2);
+    });
+    await t.test('409 conflicts and in-progress responses preserve backend error codes', async () => {
+      for (const code of ['CHAT_MESSAGE_ID_CONFLICT', 'CHAT_REQUEST_IN_PROGRESS']) {
+        global.fetch = async () => Response.json({ code }, { status: 409 });
+        await assert.rejects(send(), error => error.code === code && error.status === 409);
+      }
     });
     await t.test('missing configuration never falls back to frontend', async () => {
       delete process.env.NEXT_PUBLIC_API_BASE_URL;

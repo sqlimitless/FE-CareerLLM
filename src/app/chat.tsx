@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { ChatAccessError, prepareChatSession, readInvitationCode, type ChatSession as Session } from "@/lib/chat-session";
 
+import ChatConversation from "@/components/chat-conversation";
 import { ApiError } from "@/lib/api";
 import ChatAccess from "@/components/chat-access";
 
@@ -65,9 +66,9 @@ function ChatSession({ code }: { code: string | null }) {
     );
   }
 
-  return <main className="mx-auto flex min-h-dvh w-full max-w-3xl flex-col justify-center px-8">
-    <h1 className="text-5xl font-bold text-zinc-900">이훈재</h1>
-    <p className="mt-3 text-2xl font-semibold text-violet-700">{session.visitor.position}</p>
-    <p className="mt-8 text-lg text-zinc-700">이력서에 담긴 경험을 더 자세히 설명해 드립니다.</p>
-  </main>;
+  return <ChatConversation session={session} onNewConversation={() => {
+    setSession(null);
+    setAccess("checking");
+    setAttempt((value) => value + 1);
+  }} />;
 }

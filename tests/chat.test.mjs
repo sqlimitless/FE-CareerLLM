@@ -1,0 +1,126 @@
+import fs from 'node:fs';
+import ts from 'typescript';
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { createRequire } from 'node:module';
+const load = createRequire(import.meta.url);
+// Compile the application TypeScript in memory with the existing dev dependency.
+load.extensions['.ts'] = (module, filename) => module._compile(ts.transpileModule(fs.readFileSync(filename, 'utf8'), {
+  compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+}).outputText, filename);
+const { prepareChatSession, readInvitationCode } = load('../src/lib/chat-session.ts');
+const { sendChatStream, chatErrorMessage } = load('../src/lib/chat-stream.ts');
+const { ApiError } = load('../src/lib/api.ts');
+const { apiGet } = load('../src/lib/api.ts');
+const clientMessageId = '019a37ec-0000-7000-8000-000000000001';
+const invite = { inviteId: 'invite', companyName: '예시회사', position: '백엔드 개발자', firstUsedAt: null, expiresAt: '2027-01-02', canStartConversation: true };
+const visitor = { ...invite, visitorId: 'visitor', firstUsedAt: '2026-10-07', welcomeMessage: '환영합니다' };
+const csrf = { headerName: 'X-CSRF-TOKEN', token: 'after-entry' };
+const reply = { answer: '확정된 답변입니다.', grounded: true, sources: [{ chunkId: 'chunk', documentId: 'document', title: '프로젝트 경험' }], usage: null };
+const frame = (event, data, newline = '\n') => `event: ${event}${newline}data: ${JSON.stringify(data)}${newline}${newline}`;
+const signal = () => new AbortController().signal;
+function stream(text, step = 3) {
+  const bytes = new TextEncoder().encode(text);
+  return new Response(new ReadableStream({ start(controller) {
+    for (let i = 0; i < bytes.length; i += step) controller.enqueue(bytes.slice(i, i + step));
+    controller.close();
+  } }), { headers: { 'Content-Type': 'text/event-stream;charset=UTF-8' } });
+}
+const send = (onEvent = () => {}, abortSignal = signal()) => sendChatStream({ message: '경험을 알려 주세요', clientMessageId, csrf, signal: abortSignal, onEvent });
+
+test('chat API and SSE contracts', async (t) => {
+  const originalFetch = global.fetch;
+  const originalBase = process.env.NEXT_PUBLIC_API_BASE_URL;
+  process.env.NEXT_PUBLIC_API_BASE_URL = 'https://backend.example/';
+  try {
+    await t.test('entry CSRF → accept → rotated CSRF, using direct backend requests', async () => {
+      const requests = [];
+      global.fetch = async (url, options) => {
+        requests.push({ url, options });
+        assert.equal(url.origin, 'https://backend.example');
+        assert.equal(options.headers.get('API-Version'), '0.1.0');
+        assert.equal(options.credentials, 'include');
+        assert.equal(options.cache, 'no-store');
+        if (requests.length === 1) return Response.json(invite);
+        if (requests.length === 2) return Response.json({ headerName: 'X-CSRF-TOKEN', token: 'before-entry' });
+        if (requests.length === 3) {
+          assert.equal(options.method, 'POST');
+          assert.equal(options.headers.get('X-CSRF-TOKEN'), 'before-entry');
+          assert.deepEqual(JSON.parse(options.body), { token: 'a+b/한글' });
+          return Response.json(visitor);
+        }
+        return Response.json(csrf);
+      };
+      assert.deepEqual(await prepareChatSession('a+b/한글', signal()), { invite, visitor, csrf });
+      assert.deepEqual(requests.map(r => r.url.pathname), ['/invite', '/api/csrf', '/api/invitations/accept', '/api/csrf']);
+      assert.equal(requests[0].url.searchParams.get('token'), 'a+b/한글');
+    });
+    await t.test('unavailable invitation never creates a session', async () => {
+      let calls = 0;
+      global.fetch = async () => { calls++; return Response.json({ ...invite, canStartConversation: false }); };
+      await assert.rejects(prepareChatSession('token', signal()), e => e.reason === 'invalid');
+      assert.equal(calls, 1);
+    });
+    await t.test('post-entry CSRF failure blocks chat preparation', async () => {
+      const bodies = [invite, { headerName: 'X-CSRF-TOKEN', token: 'pre' }, visitor, { headerName: '', token: '' }];
+      global.fetch = async () => Response.json(bodies.shift());
+      await assert.rejects(prepareChatSession('token', signal()), e => e.reason === 'error');
+    });
+    await t.test('split UTF-8, emoji, CRLF, heartbeat, and authoritative final answer', async () => {
+      const events = [];
+      global.fetch = async (url, options) => {
+        assert.equal(url.href, 'https://backend.example/api/chat/messages/stream');
+        assert.equal(options.method, 'POST');
+        assert.equal(options.headers.get('API-Version'), '0.1.0');
+        assert.equal(options.headers.get('X-CSRF-TOKEN'), csrf.token);
+        assert.equal(options.headers.get('Accept'), 'text/event-stream');
+        assert.deepEqual(JSON.parse(options.body), { message: '경험을 알려 주세요', clientMessageId });
+        return stream(frame('searching', { stage: 'searching' }, '\r\n') + frame('heartbeat', {}) + frame('delta', { text: '한글 😀 임시 답변' }) + frame('validating', { stage: 'validating' }) + frame('completed', reply), 1);
+      };
+      assert.deepEqual(await send(event => events.push(event)), reply);
+      assert.deepEqual(events, [{ event: 'searching' }, { event: 'delta', text: '한글 😀 임시 답변' }, { event: 'validating' }]);
+    });
+    await t.test('multiline SSE data and no-delta grounded refusal complete normally', async () => {
+      const refusal = { answer: '이력 자료에서 확인할 수 없습니다.', grounded: false, sources: [], usage: null };
+      const json = JSON.stringify(refusal, null, 2).split('\n').map(line => `data: ${line}`).join('\n');
+      global.fetch = async () => stream(`: comment\n\nevent: completed\n${json}\n\n`);
+      assert.deepEqual(await send(), refusal);
+    });
+    await t.test('failed after delta rejects with backend code, without retry', async () => {
+      let calls = 0;
+      global.fetch = async () => { calls++; return stream(frame('delta', { text: '임시 답변' }) + frame('failed', { code: 'INVITATION_UNAVAILABLE' })); };
+      await assert.rejects(send(), e => e.code === 'INVITATION_UNAVAILABLE');
+      assert.equal(calls, 1);
+    });
+    await t.test('EOF without completed is a failure', async () => {
+      global.fetch = async () => stream(frame('delta', { text: '부분 답변' }));
+      await assert.rejects(send(), e => e.code === 'CHAT_STREAM_INTERRUPTED');
+    });
+    await t.test('HTTP errors and malformed completed are rejected', async () => {
+      global.fetch = async () => Response.json({ code: 'ACCESS_DENIED' }, { status: 403 });
+      await assert.rejects(send(), e => e.code === 'ACCESS_DENIED' && e.status === 403);
+      global.fetch = async () => stream(frame('completed', { answer: 'missing fields' }));
+      await assert.rejects(send(), e => e.code === 'INVALID_STREAM_RESPONSE');
+    });
+    await t.test('cancellation stops processing and cancels the reader', async () => {
+      const controller = new AbortController();
+      let cancelled = false;
+      global.fetch = async () => new Response(new ReadableStream({ start(streamController) {
+        streamController.enqueue(new TextEncoder().encode(frame('delta', { text: '취소 전' })));
+      }, cancel() { cancelled = true; } }), { headers: { 'Content-Type': 'text/event-stream' } });
+      await assert.rejects(send(() => controller.abort(), controller.signal), e => e.name === 'AbortError');
+      assert.equal(cancelled, true);
+    });
+    await t.test('missing configuration never falls back to frontend', async () => {
+      delete process.env.NEXT_PUBLIC_API_BASE_URL;
+      let calls = 0;
+      global.fetch = async () => { calls++; return Response.json({}); };
+      assert.throws(() => apiGet('/api/csrf', signal()), e => e.code === 'API_NOT_CONFIGURED');
+      assert.equal(calls, 0);
+    });
+  } finally {
+    global.fetch = originalFetch;
+    if (originalBase === undefined) delete process.env.NEXT_PUBLIC_API_BASE_URL;
+    else process.env.NEXT_PUBLIC_API_BASE_URL = originalBase;
+  }
+});

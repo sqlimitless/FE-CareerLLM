@@ -20,6 +20,12 @@ export function apiRequest(path: string, options: {
   if (!baseUrl) throw new ApiError("API_NOT_CONFIGURED");
   const url = new URL(`${baseUrl.replace(/\/+$/, "")}${path}`);
   if (!["http:", "https:"].includes(url.protocol)) throw new ApiError("INVALID_API_URL");
+  // In local development, keep the separate backend on the browser's host.
+  // An IP page calling localhost is cross-site and cannot share SameSite cookies.
+  if (process.env.NODE_ENV === "development" && typeof window !== "undefined"
+    && ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname)) {
+    url.hostname = window.location.hostname;
+  }
   if (options.params) url.search = options.params.toString();
   const headers = new Headers({ "API-Version": API_VERSION, Accept: options.accept ?? "application/json" });
   if (options.body !== undefined) headers.set("Content-Type", "application/json");

@@ -34,6 +34,48 @@ test('chat API and SSE contracts', async (t) => {
   const originalBase = process.env.NEXT_PUBLIC_API_BASE_URL;
   process.env.NEXT_PUBLIC_API_BASE_URL = 'https://backend.example/';
   try {
+    await t.test('LAN development uses the page hostname and retains the backend port', async () => {
+      const previousMode = process.env.NODE_ENV;
+      const previousWindow = Object.getOwnPropertyDescriptor(global, 'window');
+      const previousBase = process.env.NEXT_PUBLIC_API_BASE_URL;
+      try {
+        process.env.NODE_ENV = 'development';
+        process.env.NEXT_PUBLIC_API_BASE_URL = 'http://localhost:8080';
+        Object.defineProperty(global, 'window', { configurable: true, value: { location: { hostname: '192.168.50.6' } } });
+        const urls = [];
+        global.fetch = async url => { urls.push(url.href); return Response.json(csrf); };
+        await apiGet('/api/csrf', signal());
+        global.window.location.hostname = 'localhost';
+        await apiGet('/api/csrf', signal());
+        global.window.location.hostname = '192.168.50.6';
+        process.env.NODE_ENV = 'production';
+        await apiGet('/api/csrf', signal());
+        process.env.NODE_ENV = 'development';
+        process.env.NEXT_PUBLIC_API_BASE_URL = 'https://backend.example';
+        await apiGet('/api/csrf', signal());
+        assert.deepEqual(urls, ['http://192.168.50.6:8080/api/csrf', 'http://localhost:8080/api/csrf', 'http://localhost:8080/api/csrf', 'https://backend.example/api/csrf']);
+      } finally {
+        if (previousMode === undefined) delete process.env.NODE_ENV;
+        else process.env.NODE_ENV = previousMode;
+        process.env.NEXT_PUBLIC_API_BASE_URL = previousBase;
+        if (previousWindow) Object.defineProperty(global, 'window', previousWindow);
+        else delete global.window;
+      }
+    });
+    await t.test('HTTP LAN browsers without randomUUID still create valid distinct UUIDs', () => {
+      const previousCrypto = Object.getOwnPropertyDescriptor(global, 'crypto');
+      const originalCrypto = global.crypto;
+      try {
+        Object.defineProperty(global, 'crypto', { configurable: true, value: { getRandomValues: originalCrypto.getRandomValues.bind(originalCrypto) } });
+        const first = createClientMessage('질문');
+        const second = createClientMessage('질문');
+        assert.match(first.clientMessageId, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+        assert.notEqual(first.clientMessageId, second.clientMessageId);
+        assert.equal(createClientMessage('질문', first), first);
+      } finally {
+        Object.defineProperty(global, 'crypto', previousCrypto);
+      }
+    });
     await t.test('new and legacy token links preview, accept, rotate CSRF, and chat', async () => {
       for (const code of ['A1B2C3', 'old-invitation-code-with-more-than-six-characters', 'a+b/한글']) {
         const link = new URL('https://portfolio.example/');

@@ -27,11 +27,21 @@ export default function ChatConversation({ session, onNewConversation }: { sessi
   const activeRequest = useRef<AbortController | null>(null);
   const retryMessage = useRef<ClientMessage | null>(null);
   const followLatest = useRef(true);
+  const selectingText = useRef(false);
   const hasConversation = turns.length > 0;
 
   useEffect(() => () => activeRequest.current?.abort(), []);
   useEffect(() => {
-    if (followLatest.current) {
+    const finishSelection = () => { selectingText.current = false; };
+    window.addEventListener("pointerup", finishSelection);
+    window.addEventListener("pointercancel", finishSelection);
+    return () => {
+      window.removeEventListener("pointerup", finishSelection);
+      window.removeEventListener("pointercancel", finishSelection);
+    };
+  }, []);
+  useEffect(() => {
+    if (followLatest.current && !selectingText.current && !window.getSelection()?.toString()) {
       (activeTurnRef.current ?? endRef.current)?.scrollIntoView({ block: "end" });
     }
   }, [turns, stage, activeTurnId]);
@@ -107,16 +117,16 @@ export default function ChatConversation({ session, onNewConversation }: { sessi
         <button type="button" disabled={busy} onClick={onNewConversation} className="inline-flex shrink-0 items-center gap-2 rounded-full border border-zinc-200 bg-white px-4 py-2.5 text-xs font-medium text-zinc-600 transition-colors hover:border-zinc-300 hover:text-zinc-900 disabled:cursor-not-allowed disabled:opacity-50"><ChatIcon name="plus" className="size-4" />{mustReenter ? "다시 입장" : "새 대화"}</button>
       </header>
       {hasConversation ? <>
-        <main className="min-h-0 flex-1 overflow-y-auto" aria-label="대화 내용" onScroll={(event) => { const el = event.currentTarget; followLatest.current = el.scrollHeight - el.scrollTop - el.clientHeight < 100; }}>
+        <main data-chat-content className="min-h-0 flex-1 overflow-y-auto" aria-label="대화 내용" onPointerDown={(event) => { if (event.button === 0) { selectingText.current = true; followLatest.current = false; } }} onScroll={(event) => { const el = event.currentTarget; followLatest.current = el.scrollHeight - el.scrollTop - el.clientHeight < 100; }}>
           <div className="mx-auto max-w-3xl space-y-8 px-5 py-8 sm:px-8">
             {turns.map((turn) => <div key={turn.id} ref={turn.id === activeTurnId ? activeTurnRef : undefined} className="space-y-6">
-              <div className="flex flex-col items-end"><div className="max-w-[88%] whitespace-pre-wrap break-words rounded-2xl rounded-tr-sm bg-violet-100 px-5 py-3.5 text-sm leading-7 text-zinc-900"><span className="sr-only">질문: </span>{turn.question}</div></div>
+              <div className="flex flex-col items-end"><div data-chat-message className="max-w-[88%] select-text whitespace-pre-wrap break-words rounded-2xl rounded-tr-sm bg-violet-100 px-5 py-3.5 text-sm leading-7 text-zinc-900"><span className="sr-only">질문: </span>{turn.question}</div></div>
               <article className="text-sm leading-7 text-zinc-700" aria-label="AI 답변" aria-busy={!turn.reply && !turn.error}>
                 <p className="mb-2 text-xs font-semibold text-violet-700">이훈재의 이력에 대한 답변</p>
                 {turn.error ? <div role="alert" className="rounded-xl border border-red-100 bg-red-50 p-4 text-red-800"><p>{turn.error}</p><p className="mt-2 text-xs text-red-700">미완료 답변은 표시하지 않습니다. 질문은 입력창에 남겨두었습니다.</p>
                   {!mustReenter && <button type="button" disabled={busy} onClick={() => { void send(undefined, { clientMessageId: turn.id, question: turn.question }); }} className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-medium text-red-800 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"><ChatIcon name="refresh" className="size-3.5" />다시 시도</button>}
                 </div>
-                  : <><p className="whitespace-pre-wrap break-words">{turn.reply?.answer ?? turn.provisional}</p>
+                  : <><p data-chat-message className="select-text whitespace-pre-wrap break-words">{turn.reply?.answer ?? turn.provisional}</p>
                     {!turn.reply && busy && turn.id === activeTurnId && <p role="status" className="mt-3 flex items-center gap-2 text-xs text-zinc-500"><ChatIcon name="loader" className="size-3.5 motion-safe:animate-spin" />{stage ? stageLabels[stage] : "대기 중…"}</p>}
                   </>}
               </article>

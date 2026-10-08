@@ -22,6 +22,11 @@
   }
 
   button:not(:disabled) { cursor: pointer; }
+  [data-chat-content], [data-chat-message] {
+    -webkit-user-select: text;
+    user-select: text;
+  }
+  [data-chat-message] { cursor: text; }
   button, textarea { -webkit-tap-highlight-color: transparent; }
   button:focus-visible {
     outline: 2px solid var(--color-violet-500);

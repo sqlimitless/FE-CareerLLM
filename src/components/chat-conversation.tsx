@@ -14,7 +14,7 @@ const stageLabels: Record<ChatStage, string> = {
   validating: "답변을 확인하고 있어요…",
 };
 
-export default function ChatConversation({ session, onNewConversation }: { session: ChatSession; onNewConversation: () => void }) {
+export default function ChatConversation({ session, onNewConversation, onAccessEnded }: { session: ChatSession; onNewConversation: () => void; onAccessEnded: () => void }) {
   const [draft, setDraft] = useState("");
   const [turns, setTurns] = useState<Turn[]>([]);
   const [stage, setStage] = useState<ChatStage | null>(null);
@@ -81,10 +81,15 @@ export default function ChatConversation({ session, onNewConversation }: { sessi
       // Only completed is authoritative, even when it replaces a provisional answer.
       updateTurn({ reply, provisional: "" });
     } catch (error) {
+      if (error instanceof ApiError && error.code === "INVITATION_UNAVAILABLE") {
+        setMustReenter(true);
+        onAccessEnded();
+        return;
+      }
       updateTurn({ provisional: "", error: controller.signal.aborted ? "답변 생성을 중지했습니다." : chatErrorMessage(error) });
       retryMessage.current = outgoing;
       setDraft(question);
-      if (error instanceof ApiError && ["UNAUTHENTICATED", "INVITATION_UNAVAILABLE", "ACCESS_DENIED", "CHAT_MESSAGE_ID_CONFLICT"].includes(error.code)) {
+      if (error instanceof ApiError && ["UNAUTHENTICATED", "ACCESS_DENIED", "CHAT_MESSAGE_ID_CONFLICT"].includes(error.code)) {
         setMustReenter(true);
       }
     } finally {

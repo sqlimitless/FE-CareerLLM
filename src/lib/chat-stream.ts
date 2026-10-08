@@ -84,7 +84,7 @@ export function chatErrorMessage(error: unknown): string {
   const code = error instanceof ApiError ? error.code : "CONNECTION_ERROR";
   const messages: Record<string, string> = {
     UNAUTHENTICATED: "접속 세션이 종료되었습니다. 다시 입장해 주세요.",
-    INVITATION_UNAVAILABLE: "초대 링크가 만료되었거나 더 이상 사용할 수 없습니다.",
+    INVITATION_UNAVAILABLE: "초대 코드가 만료되었거나 폐기되어 이용이 종료되었습니다. 새로운 초대 링크를 요청해 주세요.",
     ACCESS_DENIED: "요청을 확인하지 못했습니다. 다시 입장한 후 질문해 주세요.",
     INVALID_REQUEST: "질문은 공백을 제외하고 1~1,000자로 입력해 주세요.",
     CHAT_MESSAGE_TOO_LONG: "질문이 처리 가능한 범위를 넘었습니다. 조금 더 짧게 작성해 주세요.",

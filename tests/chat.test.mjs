@@ -34,6 +34,72 @@ test('chat API and SSE contracts', async (t) => {
   const originalBase = process.env.NEXT_PUBLIC_API_BASE_URL;
   process.env.NEXT_PUBLIC_API_BASE_URL = 'https://backend.example/';
   try {
+    await t.test('new and legacy token links preview, accept, rotate CSRF, and chat', async () => {
+      for (const code of ['A1B2C3', 'old-invitation-code-with-more-than-six-characters', 'a+b/한글']) {
+        const link = new URL('https://portfolio.example/');
+        link.searchParams.set('token', code);
+        const invitationCode = readInvitationCode(link.searchParams);
+        assert.equal(invitationCode, code);
+        const paths = [];
+        let csrfCalls = 0;
+        global.fetch = async (url, options) => {
+          paths.push(url.pathname);
+          assert.equal(options.headers.get('API-Version'), '0.1.0');
+          assert.equal(options.credentials, 'include');
+          assert.equal(options.cache, 'no-store');
+          if (url.pathname === '/invite') {
+            assert.equal(options.method, 'GET');
+            assert.deepEqual([...url.searchParams], [['token', code]]);
+            return Response.json(invite);
+          }
+          if (url.pathname === '/api/csrf') {
+            return Response.json(++csrfCalls === 1 ? { ...csrf, token: 'before-entry' } : csrf);
+          }
+          if (url.pathname === '/api/invitations/accept') {
+            assert.equal(options.method, 'POST');
+            assert.deepEqual(JSON.parse(options.body), { token: code });
+            assert.equal(options.headers.get(csrf.headerName), 'before-entry');
+            return Response.json(visitor);
+          }
+          assert.equal(url.pathname, '/api/chat/messages/stream');
+          assert.equal(options.headers.get(csrf.headerName), csrf.token);
+          assert.deepEqual(JSON.parse(options.body), { message: '경험을 알려 주세요', clientMessageId });
+          return stream(frame('completed', reply));
+        };
+        const session = await prepareChatSession(invitationCode, signal());
+        assert.deepEqual(await sendChatStream({ message: '경험을 알려 주세요', clientMessageId, csrf: session.csrf, signal: signal(), onEvent() {} }), reply);
+        assert.deepEqual(paths, ['/invite', '/api/csrf', '/api/invitations/accept', '/api/csrf', '/api/chat/messages/stream']);
+      }
+    });
+    await t.test('missing, blank, or duplicate codes are rejected without imposing a new format', () => {
+      for (const query of ['', 'token=', 'token=++', 'token=A1B2C3&token=D4E5F6', 'code=A1B2C3']) {
+        assert.equal(readInvitationCode(new URLSearchParams(query)), null);
+      }
+    });
+    await t.test('preview rejects invalid or unavailable invitations before accept', async () => {
+      for (const [status, code] of [[400, 'INVALID_INVITATION_TOKEN'], [403, 'INVITATION_UNAVAILABLE']]) {
+        let calls = 0;
+        global.fetch = async () => { calls++; return Response.json({ code }, { status }); };
+        await assert.rejects(prepareChatSession('A1B2C3', signal()), e => e.reason === 'invalid');
+        assert.equal(calls, 1);
+      }
+    });
+    await t.test('revocation between preview and accept stops before rotated CSRF', async () => {
+      const responses = [Response.json(invite), Response.json(csrf), Response.json({ code: 'INVITATION_UNAVAILABLE' }, { status: 403 })];
+      global.fetch = async () => responses.shift();
+      await assert.rejects(prepareChatSession('A1B2C3', signal()), e => e.code === 'INVITATION_UNAVAILABLE');
+      assert.equal(responses.length, 0);
+    });
+    await t.test('revoked visitor chat rejects with terminal code, session absence stays distinct', async () => {
+      for (const [status, code] of [[403, 'INVITATION_UNAVAILABLE'], [401, 'UNAUTHENTICATED']]) {
+        let calls = 0;
+        global.fetch = async () => { calls++; return Response.json({ code }, { status }); };
+        await assert.rejects(send(), e => e.code === code && e.status === status);
+        assert.equal(calls, 1);
+      }
+      assert.match(chatErrorMessage(new ApiError('INVITATION_UNAVAILABLE', 403)), /이용이 종료/);
+      assert.match(chatErrorMessage(new ApiError('UNAUTHENTICATED', 401)), /다시 입장/);
+    });
     await t.test('entry CSRF → accept → rotated CSRF, using direct backend requests', async () => {
       const requests = [];
       global.fetch = async (url, options) => {

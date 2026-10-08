@@ -8,7 +8,7 @@ import ChatConversation from "@/components/chat-conversation";
 import { ApiError } from "@/lib/api";
 import ChatAccess from "@/components/chat-access";
 
-type AccessState = "checking" | "valid" | "invalid" | "error";
+type AccessState = "checking" | "valid" | "invalid" | "ended" | "error";
 
 export default function Chat() {
   const searchParams = useSearchParams();
@@ -44,6 +44,8 @@ function ChatSession({ code }: { code: string | null }) {
   if (!code || access !== "valid" || !session) {
     const title = !code
       ? "초대 링크로 접속해 주세요"
+      : access === "ended"
+        ? "대화 이용이 종료되었습니다"
       : access === "checking"
         ? "초대 코드를 확인하고 있어요"
         : access === "invalid"
@@ -51,6 +53,8 @@ function ChatSession({ code }: { code: string | null }) {
           : "초대 코드를 확인하지 못했어요";
     const description = !code
       ? "이력서에 첨부된 초대 링크로 접속해 주세요."
+      : access === "ended"
+        ? "초대 코드가 만료되었거나 폐기되었습니다. 새로운 초대 링크를 요청해 주세요."
       : access === "checking"
         ? "잠시만 기다려 주세요. 초대 코드를 확인하고 대화를 준비 중입니다."
         : access === "invalid"
@@ -58,7 +62,7 @@ function ChatSession({ code }: { code: string | null }) {
           : "일시적으로 연결할 수 없습니다. 잠시 후 다시 시도해 주세요.";
     return (
       <ChatAccess
-        mode={!code ? "missing" : access === "valid" ? "checking" : access}
+        mode={!code ? "missing" : access === "valid" ? "checking" : access === "ended" ? "invalid" : access}
         title={title}
         description={description}
         onRetry={code && access === "error" ? () => { setAccess("checking"); setAttempt((value) => value + 1); } : undefined}
@@ -66,7 +70,7 @@ function ChatSession({ code }: { code: string | null }) {
     );
   }
 
-  return <ChatConversation session={session} onNewConversation={() => {
+  return <ChatConversation session={session} onAccessEnded={() => { setAccess("ended"); }} onNewConversation={() => {
     setSession(null);
     setAccess("checking");
     setAttempt((value) => value + 1);

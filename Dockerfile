@@ -2,7 +2,7 @@ FROM node:24-bookworm-slim AS builder
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci && npm cache clean --force
-COPY next.config.ts tsconfig.json next-env.d.ts postcss.config.mjs ./
+COPY next.config.ts tsconfig.json postcss.config.mjs ./
 COPY src ./src
 COPY public ./public
 COPY tests ./tests

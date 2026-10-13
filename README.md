@@ -19,9 +19,9 @@ npm install
 npm run dev
 ```
 
-접속 예시: `http://localhost:3000/?token=A1B2C3`
+접속 예시: `http://localhost:3000/invite/A1B2C3`
 
-신규 초대 코드는 대문자 영문과 숫자를 포함한 6자리입니다. 기존 긴 코드와 공유 링크도 지원하므로 프론트에서 길이·형식을 제한하지 않습니다. 내부에서는 `code`로 다루지만 공개 URL의 `token` 파라미터와 API 본문의 `token` 필드는 호환을 위해 유지합니다. CSRF `token`과 LLM 토큰은 별개의 용어입니다.
+신규 초대 코드는 대문자 영문과 숫자를 포함한 6자리입니다. 기존 긴 코드와 공유 링크도 지원하므로 프론트에서 길이·형식을 제한하지 않습니다. 새 링크는 `/invite/<초대 코드>`를 사용하며, 코드에 특수 문자가 있다면 `encodeURIComponent`로 인코딩합니다. 기존 `/?token=A1B2C3` 링크도 계속 지원합니다. 경로에 있는 코드가 사용되므로 `/invite/A1B2C3?token=D4E5F6`에서는 `A1B2C3`으로 입장합니다. 내부에서는 `code`로 다루지만 API의 `token` 필드는 유지합니다. CSRF `token`과 LLM 토큰은 별개의 용어입니다.
 
 `localhost:3000`은 프론트엔드 화면 주소입니다. API 요청은 브라우저에서 `NEXT_PUBLIC_API_BASE_URL`의 백엔드 서버로 직접 전송합니다. 주소 미설정 시 프론트엔드 주소로 대체하지 않고 오류로 처리합니다.
 
@@ -31,7 +31,7 @@ npm run dev
 
 ## 대화 준비 흐름
 
-1. URL의 `token` 파라미터로 `GET /invite?token=...`를 호출합니다.
+1. `/invite/<초대 코드>` 경로 또는 기존 URL의 `token` 쿼리 파라미터에서 코드를 읽어 백엔드의 `GET /invite?token=...`를 호출합니다.
 2. 응답의 `canStartConversation`이 `true`인 경우에만 진행합니다. `firstUsedAt`이나 `expiresAt`으로 프론트엔드가 별도 판단하지 않습니다.
 3. `GET /api/csrf`를 호출해 `headerName`과 `token`을 받습니다.
 4. 발급받은 CSRF 헤더와 `{ "token": "초대 코드" }` 본문으로 `POST /api/invitations/accept`를 호출해 방문자 세션을 만듭니다.

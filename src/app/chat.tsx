@@ -13,6 +13,10 @@ type AccessState = "checking" | "valid" | "invalid" | "ended" | "error";
 export default function Chat() {
   const searchParams = useSearchParams();
   const code = readInvitationCode(searchParams);
+  return <InvitationChat code={code} />;
+}
+
+export function InvitationChat({ code }: { code: string | null }) {
   // A URL invitation code change must discard the previous validation and draft.
   return <ChatSession key={code ?? "missing-code"} code={code} />;
 }

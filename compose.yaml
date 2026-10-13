@@ -2,6 +2,9 @@ name: career-llm-public
 services:
   app:
     image: career-llm-public:local
+    networks:
+      - default
+      - proxy-network
     pull_policy: build
     build:
       context: .
@@ -21,3 +24,7 @@ services:
       timeout: 5s
       retries: 3
       start_period: 30s
+networks:
+  proxy-network:
+    external: true
+    name: proxy-network

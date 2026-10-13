@@ -6,6 +6,7 @@ import type { ChatSession } from "@/lib/chat-session";
 import { createClientMessage, type ClientMessage } from "@/lib/client-message";
 import { chatErrorMessage, sendChatStream, type ChatReply, type ChatStage } from "@/lib/chat-stream";
 import ChatIcon from "./chat-icon";
+import ChatDiagram from "./chat-diagram";
 
 type Turn = { id: string; question: string; provisional: string; reply: ChatReply | null; error: string | null };
 const stageLabels: Record<ChatStage, string> = {
@@ -132,6 +133,7 @@ export default function ChatConversation({ session, onNewConversation, onAccessE
                   {!mustReenter && <button type="button" disabled={busy} onClick={() => { void send(undefined, { clientMessageId: turn.id, question: turn.question }); }} className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-medium text-red-800 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"><ChatIcon name="refresh" className="size-3.5" />다시 시도</button>}
                 </div>
                   : <><p data-chat-message className="select-text whitespace-pre-wrap break-words">{turn.reply?.answer ?? turn.provisional}</p>
+                    {turn.reply?.diagram && <ChatDiagram diagram={turn.reply.diagram} />}
                     {!turn.reply && busy && turn.id === activeTurnId && <p role="status" className="mt-3 flex items-center gap-2 text-xs text-zinc-500"><ChatIcon name="loader" className="size-3.5 motion-safe:animate-spin" />{stage ? stageLabels[stage] : "대기 중…"}</p>}
                   </>}
               </article>

@@ -1,4 +1,5 @@
 import { ApiError, apiRequest, readApiJson, type CsrfToken } from "./api";
+import { readChatDiagram, type ChatDiagram } from "./chat-diagram";
 
 export type ChatSource = { chunkId: string; documentId: string; title: string };
 export type ChatReply = {
@@ -6,6 +7,7 @@ export type ChatReply = {
   grounded: boolean;
   sources: ChatSource[];
   usage: { inputTokens: number | null; outputTokens: number | null; cachedInputTokens: number | null } | null;
+  diagram?: ChatDiagram | null;
 };
 export type ChatStage = "searching" | "generating" | "validating";
 export type ChatEvent = { event: ChatStage } | { event: "delta"; text: string };
@@ -56,7 +58,8 @@ export async function sendChatStream({ message, clientMessageId, csrf, signal, o
         if (event === "completed") {
           if (!isReply(payload)) throw new ApiError("INVALID_STREAM_RESPONSE");
           signal.throwIfAborted();
-          return payload;
+          // Optional diagram errors must never invalidate an otherwise valid reply.
+          return "diagram" in payload ? { ...payload, diagram: readChatDiagram(payload.diagram) } : payload;
         }
         if (event === "failed") {
           const code = typeof payload === "object" && payload !== null && "code" in payload && typeof payload.code === "string"

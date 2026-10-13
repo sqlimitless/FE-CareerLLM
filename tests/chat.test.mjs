@@ -195,6 +195,26 @@ test('chat API and SSE contracts', async (t) => {
       global.fetch = async () => stream(`: comment\n\nevent: completed\n${json}\n\n`);
       assert.deepEqual(await send(), refusal);
     });
+    await t.test('completed preserves optional diagrams and cached replay; deltas remain text only', async () => {
+      for (const illustrative of [true, false]) {
+        const diagram = { format: 'mermaid', title: '요청 흐름', code: 'flowchart LR\n A[브라우저] --> B[서버]', illustrative };
+        const completed = { ...reply, diagram };
+        const events = [];
+        global.fetch = async () => stream(frame('delta', { text: '설명', diagram }) + frame('completed', completed));
+        assert.deepEqual(await send(event => events.push(event)), completed);
+        assert.deepEqual(events, [{ event: 'delta', text: '설명' }]);
+        global.fetch = async () => stream(frame('completed', completed));
+        assert.deepEqual(await send(), completed);
+      }
+    });
+    await t.test('invalid optional diagram never discards answer or ends the session', async () => {
+      for (const diagram of [null, 'bad', {}, { format: 'svg', code: '<svg/>', title: 'bad', illustrative: true },
+        { format: 'mermaid', title: 'bad', code: 'flowchart LR\n' + 'A'.repeat(6000), illustrative: true },
+        { format: 'mermaid', title: 'bad', code: 'flowchart LR\nclick A "https://example.com"', illustrative: true }]) {
+        global.fetch = async () => stream(frame('completed', { ...reply, diagram }));
+        assert.deepEqual(await send(), { ...reply, diagram: null });
+      }
+    });
     await t.test('failed after delta rejects with backend code, without retry', async () => {
       let calls = 0;
       global.fetch = async () => { calls++; return stream(frame('delta', { text: '임시 답변' }) + frame('failed', { code: 'INVITATION_UNAVAILABLE' })); };

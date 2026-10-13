@@ -103,13 +103,13 @@ export default function ChatConversation({ session, onNewConversation, onAccessE
   const composer = (
     <form onSubmit={(event) => { void send(event); }} className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-[0_8px_32px_-12px_rgba(24,24,27,0.10)] transition-shadow focus-within:border-violet-300 focus-within:ring-4 focus-within:ring-violet-100/60 sm:p-5">
       <label className="sr-only" htmlFor="message">AI에게 보낼 메시지</label>
-      <textarea ref={messageRef} id="message" value={draft} onChange={(event) => setDraft(event.target.value)} placeholder={mustReenter ? "다시 입장한 후 질문할 수 있습니다" : "무엇이든 물어보세요…"} rows={hasConversation ? 2 : 3} maxLength={1000} disabled={busy || mustReenter} aria-describedby="composer-note" onKeyDown={(event) => {
+      <textarea ref={messageRef} id="message" value={draft} onChange={(event) => setDraft(event.target.value)} placeholder={mustReenter ? "다시 입장한 후 질문할 수 있습니다" : undefined} rows={hasConversation ? 2 : 3} maxLength={1000} disabled={busy || mustReenter} aria-describedby="composer-note" onKeyDown={(event) => {
         if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing && event.nativeEvent.keyCode !== 229) {
           event.preventDefault(); void send();
         }
       }} className="block max-h-48 min-h-16 w-full resize-y border-0 bg-transparent text-base leading-7 text-zinc-800 placeholder:text-zinc-400 focus:outline-none disabled:opacity-60" />
       <div className="mt-3 flex items-center justify-between gap-3">
-        <span id="composer-note" className="text-xs text-zinc-500">{busy && stage ? stageLabels[stage] : `${draft.length.toLocaleString()} / 1,000 · Shift + Enter로 줄바꿈`}</span>
+        <span id="composer-note" className="text-xs text-zinc-500">{busy && stage ? stageLabels[stage] : `${draft.length.toLocaleString()} / 1,000`}</span>
         {busy ? <button key="stop" type="button" onClick={(event) => { event.preventDefault(); activeRequest.current?.abort(); }} className="rounded-xl bg-zinc-900 px-4 py-2.5 text-xs font-medium text-white hover:bg-zinc-700">생성 중지</button>
           : <button key="send" type="submit" disabled={!draft.trim() || mustReenter} className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-zinc-900 text-white transition-colors hover:bg-violet-700 disabled:cursor-not-allowed disabled:bg-zinc-100 disabled:text-zinc-400" aria-label="메시지 전송"><ChatIcon name="arrow" /></button>}
       </div>
@@ -118,10 +118,10 @@ export default function ChatConversation({ session, onNewConversation, onAccessE
 
   return (
     <div className={`flex flex-col bg-[#f8f9fc] ${hasConversation ? "h-dvh" : "min-h-dvh"}`}>
-      <header className={`flex shrink-0 items-center px-6 py-5 sm:px-10 ${hasConversation ? "justify-between border-b border-zinc-200/70" : "justify-end"}`}>
-        {hasConversation && <div className="min-w-0 pr-4"><p className="text-lg font-bold text-zinc-900">이훈재</p><p className="truncate text-xs text-violet-700">{session.visitor.position}</p></div>}
+      {hasConversation && <header className="flex shrink-0 items-center justify-between border-b border-zinc-200/70 px-6 py-5 sm:px-10">
+        <div className="min-w-0 pr-4"><p className="text-lg font-bold text-zinc-900">이훈재</p><p className="truncate text-xs text-violet-700">{session.visitor.position}</p></div>
         <button type="button" disabled={busy} onClick={onNewConversation} className="inline-flex shrink-0 items-center gap-2 rounded-full border border-zinc-200 bg-white px-4 py-2.5 text-xs font-medium text-zinc-600 transition-colors hover:border-zinc-300 hover:text-zinc-900 disabled:cursor-not-allowed disabled:opacity-50"><ChatIcon name="plus" className="size-4" />{mustReenter ? "다시 입장" : "새 대화"}</button>
-      </header>
+      </header>}
       {hasConversation ? <>
         <main data-chat-content className="min-h-0 flex-1 overflow-y-auto" aria-label="대화 내용" onPointerDown={(event) => { if (event.button === 0) { selectingText.current = true; followLatest.current = false; } }} onScroll={(event) => { const el = event.currentTarget; followLatest.current = el.scrollHeight - el.scrollTop - el.clientHeight < 100; }}>
           <div className="mx-auto max-w-3xl space-y-8 px-5 py-8 sm:px-8">
@@ -143,10 +143,9 @@ export default function ChatConversation({ session, onNewConversation, onAccessE
         </main>
         <footer className="mx-auto w-full max-w-3xl shrink-0 px-5 pb-5 pt-3 sm:px-8">{composer}<p className="mt-2 text-center text-[11px] text-zinc-500">AI가 이력 자료를 바탕으로 답변합니다. 중요한 내용은 이력서와 함께 확인해 주세요.</p></footer>
       </> : <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col justify-center px-5 pb-12 pt-8 sm:px-8 sm:pb-20">
-        <div className="mb-9 sm:mb-11">
-          <h1 className="text-5xl font-bold leading-tight tracking-[-0.055em] text-zinc-900 sm:text-7xl">이훈재</h1>
-          <p className="mt-3 text-2xl font-semibold leading-snug tracking-tight text-violet-700 sm:text-3xl">{session.visitor.position}</p>
-          <div className="mt-8 border-l-2 border-violet-200 pl-4 sm:mt-10 sm:pl-5"><p className="text-lg font-medium leading-relaxed tracking-tight text-zinc-700 sm:text-xl">이력서에 담긴 경험을 더 자세히 설명해 드립니다.</p><p className="mt-2 text-sm leading-7 text-zinc-500 sm:text-[15px]">맡았던 역할과 기술 선택의 배경, 문제를 해결한 과정까지 궁금한 내용을 질문해 주세요.</p></div>
+        <div className="mb-7 sm:mb-8">
+          <h1 className="text-2xl font-semibold leading-relaxed tracking-tight text-zinc-900 sm:text-3xl">안녕하세요.<br />백엔드 개발자 이훈재입니다.</h1>
+          <p className="mt-3 text-sm leading-7 text-zinc-500 sm:text-base">이력서에 다 담지 못한 이야기를 담아봤습니다.</p>
         </div>
         {composer}
       </main>}

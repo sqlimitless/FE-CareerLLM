@@ -8,13 +8,20 @@ type AccessProps = {
 };
 
 export default function ChatAccess({ mode, title, description, onRetry }: AccessProps) {
+  if (mode === "missing") {
+    return (
+      <main className="flex min-h-dvh items-center justify-center bg-[#f8f9fc] px-5" role="status" aria-live="polite">
+        <h1 className="text-center text-base font-normal leading-7 text-zinc-500">{title}</h1>
+      </main>
+    );
+  }
   const checking = mode === "checking";
   return (
     <div className="flex min-h-dvh flex-col bg-[#f8f9fc]">
       <main className="flex flex-1 items-center justify-center px-5 py-12">
         <div className="w-full max-w-md rounded-3xl border border-zinc-200/70 bg-white p-8 text-center shadow-[0_16px_60px_-24px_rgba(24,24,27,0.15)] sm:p-12" role="status" aria-live="polite" aria-busy={checking}>
           <div className="mx-auto mb-7 flex size-14 items-center justify-center rounded-2xl bg-violet-50 text-violet-600">
-            <ChatIcon name={checking ? "loader" : mode === "missing" ? "link" : "alert"} className={`size-6 ${checking ? "motion-safe:animate-spin" : ""}`} />
+            <ChatIcon name={checking ? "loader" : "alert"} className={`size-6 ${checking ? "motion-safe:animate-spin" : ""}`} />
           </div>
           <p className="mb-3 text-xs font-medium tracking-wide text-violet-600">{checking ? "대화를 준비하는 중" : "초대받은 분을 위한 공간"}</p>
           <h1 className="text-xl font-semibold tracking-tight text-zinc-900 sm:text-2xl">{title}</h1>

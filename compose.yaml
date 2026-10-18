@@ -3,14 +3,16 @@ services:
   app:
     image: career-llm-public:local
     networks:
-      - default
-      - proxy-network
+      default:
+      proxy-network:
+        aliases:
+          - careerllm-public
     pull_policy: build
     build:
       context: .
       dockerfile: Dockerfile
       args:
-        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://192.168.50.125:8080}
+        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:?Set NEXT_PUBLIC_API_BASE_URL before building}
     ports:
       - "${PUBLIC_BIND_ADDRESS:-0.0.0.0}:${PUBLIC_PORT:-3000}:3000"
     init: true
@@ -27,4 +29,4 @@ services:
 networks:
   proxy-network:
     external: true
-    name: proxy-network
+    name: proxy

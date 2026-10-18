@@ -160,9 +160,9 @@ NPM에 아래 두 Proxy Host를 설정합니다. 각 도메인의 DNS를 실제 
 | 도메인 | Scheme | Forward Hostname/IP | Forward Port |
 | --- | --- | --- | --- |
 | career.idlebean.com | http | careerllm-public | 3000 |
-| career-api.idlebean.com | http | 192.168.50.120 | 8080 |
+| career-api.idlebean.com | http | careerllm-backend | 8080 |
 
-API 도메인은 백엔드의 호스트 게시 포트로 전달합니다. 프론트는 코드에서 `/api/...` 또는 `/invite`를 API 기본 URL에 붙입니다. NPM API Proxy Host의 Advanced에는 아래 스트리밍 설정을 추가합니다.
+API 도메인은 같은 `proxy` 네트워크의 백엔드 별칭 `careerllm-backend`로 전달합니다. 백엔드의 최신 Compose를 먼저 재배포하여 해당 별칭을 적용합니다. 프론트는 코드에서 `/api/...` 또는 `/invite`를 API 기본 URL에 붙입니다. NPM API Proxy Host의 Advanced에는 아래 스트리밍 설정을 추가합니다.
 
 ```nginx
 proxy_buffering off;

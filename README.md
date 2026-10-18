@@ -148,32 +148,29 @@ Git 저장소 FE-CareerLLM, reference `refs/heads/main`, Compose path `compose.y
 Portainer Stack 환경변수:
 
 ```dotenv
-NEXT_PUBLIC_API_BASE_URL=https://career.idlebean.com/backend
+NEXT_PUBLIC_API_BASE_URL=https://career-api.idlebean.com
 PUBLIC_BIND_ADDRESS=0.0.0.0
 PUBLIC_PORT=3000
 ```
 
 `NEXT_PUBLIC_API_BASE_URL`은 필수 빌드 인자이며 누락 시 Compose가 배포를 중단합니다. 변경 시 프론트 이미지를 다시 빌드해야 합니다. OpenAI·DB·Redis 비밀값은 프론트에 넣지 않습니다. `pull_policy: build`로 Git 배포 시 이미지를 빌드합니다.
 
-NPM Proxy Host의 domain은 `career.idlebean.com`, scheme은 `http`, Forward Hostname/IP는 `careerllm-public`, Forward Port는 `3000`입니다. DNS는 실제 공인 진입점으로 연결하고 SSL 탭에서 인증서와 Force SSL을 설정합니다.
+NPM에 아래 두 Proxy Host를 설정합니다. 각 도메인의 DNS를 실제 공인 진입점에 연결하고 SSL 탭에서 인증서와 Force SSL을 설정합니다.
 
-NPM 해당 Proxy Host의 Advanced에 아래 location을 추가합니다. 백엔드가 같은 서버의 8080 포트에 게시되어 있다는 현재 배포 구성을 사용합니다. `/backend/`를 제거하여 백엔드의 `/api/...`와 `/invite`로 전달합니다.
+| 도메인 | Scheme | Forward Hostname/IP | Forward Port |
+| --- | --- | --- | --- |
+| career.idlebean.com | http | careerllm-public | 3000 |
+| career-api.idlebean.com | http | 192.168.50.120 | 8080 |
+
+API 도메인은 백엔드의 호스트 게시 포트로 전달합니다. 프론트는 코드에서 `/api/...` 또는 `/invite`를 API 기본 URL에 붙입니다. NPM API Proxy Host의 Advanced에는 아래 스트리밍 설정을 추가합니다.
 
 ```nginx
-location /backend/ {
-    proxy_pass http://192.168.50.120:8080/;
-    proxy_http_version 1.1;
-    proxy_set_header Host $host;
-    proxy_set_header X-Real-IP $remote_addr;
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    proxy_set_header X-Forwarded-Proto $scheme;
-    proxy_buffering off;
-    proxy_cache off;
-    proxy_read_timeout 180s;
-    proxy_send_timeout 180s;
-}
+proxy_buffering off;
+proxy_cache off;
+proxy_read_timeout 180s;
+proxy_send_timeout 180s;
 ```
 
-브라우저는 프론트와 같은 출처로 API를 호출합니다. 프론트의 `/invite/<code>` 화면과 백엔드의 `/invite?token=...`는 `/backend` 접두사로 구분됩니다. 백엔드는 HTTPS 세션 쿠키를 사용하도록 `SESSION_COOKIE_SECURE=true`로 설정합니다.
+브라우저가 별도 API 출처를 호출하므로 백엔드는 `https://career.idlebean.com`을 CORS 허용 출처로 등록하고 credentials를 허용해야 합니다. 현재 백엔드 설정은 이 출처를 허용합니다. 백엔드의 `SESSION_COOKIE_SECURE=true`를 유지합니다.
 
-배포 후 `https://career.idlebean.com/` 화면과 `https://career.idlebean.com/backend/api/csrf`를 확인합니다. 후자는 요청 헤더 `API-Version: 0.1.0`이 필요합니다. 관리자에서 만든 초대 링크로 입장·채팅·스트리밍 동작도 확인합니다. Docker healthcheck는 프론트 HTTP 응답을 확인하며 API 연결까지 검증하지 않습니다.
+배포 후 `https://career.idlebean.com/` 화면과 `https://career-api.idlebean.com/api/csrf`를 확인합니다. 후자는 요청 헤더 `API-Version: 0.1.0`이 필요합니다. 관리자에서 만든 초대 링크로 입장·채팅·스트리밍 동작도 확인합니다. Docker healthcheck는 프론트 HTTP 응답을 확인하며 API 연결까지 검증하지 않습니다.

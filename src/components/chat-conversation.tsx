@@ -15,7 +15,7 @@ const stageLabels: Record<ChatStage, string> = {
   validating: "답변을 확인하고 있어요…",
 };
 
-export default function ChatConversation({ session, onNewConversation, onAccessEnded }: { session: ChatSession; onNewConversation: () => void; onAccessEnded: () => void }) {
+export default function ChatConversation({ session, onNewConversation, onAccessEnded }: { session: ChatSession; onNewConversation: () => void; onAccessEnded: (reason?: "guest-disabled") => void }) {
   const [draft, setDraft] = useState("");
   const [turns, setTurns] = useState<Turn[]>([]);
   const [stage, setStage] = useState<ChatStage | null>(null);
@@ -82,9 +82,9 @@ export default function ChatConversation({ session, onNewConversation, onAccessE
       // Only completed is authoritative, even when it replaces a provisional answer.
       updateTurn({ reply, provisional: "" });
     } catch (error) {
-      if (error instanceof ApiError && error.code === "INVITATION_UNAVAILABLE") {
+      if (error instanceof ApiError && ["INVITATION_UNAVAILABLE", "GUEST_ACCESS_DISABLED"].includes(error.code)) {
         setMustReenter(true);
-        onAccessEnded();
+        onAccessEnded(error.code === "GUEST_ACCESS_DISABLED" ? "guest-disabled" : undefined);
         return;
       }
       updateTurn({ provisional: "", error: controller.signal.aborted ? "답변 생성을 중지했습니다." : chatErrorMessage(error) });

@@ -19,7 +19,7 @@ export type Visitor = {
   expiresAt: string;
   welcomeMessage: string;
 };
-export type ChatSession = { invite: Invite; visitor: Visitor; csrf: CsrfToken };
+export type ChatSession = { invite: Invite | null; visitor: Visitor; csrf: CsrfToken };
 
 export class ChatAccessError extends Error {
   constructor(public readonly reason: "invalid" | "error") {
@@ -33,7 +33,19 @@ export function readInvitationCode(params: Pick<URLSearchParams, "getAll">): str
   return codes.length === 1 && codes[0].trim() ? codes[0] : null;
 }
 
-export async function prepareChatSession(code: string, signal: AbortSignal): Promise<ChatSession> {
+export async function prepareChatSession(code: string | null, signal: AbortSignal): Promise<ChatSession> {
+  if (code === null) {
+    const entryCsrf = await getCsrf(signal);
+    signal.throwIfAborted();
+    const visitor = await readApiJson(await apiRequest("/api/visitors/guest", {
+      signal, method: "POST", csrf: entryCsrf,
+    }));
+    signal.throwIfAborted();
+    if (!isVisitor(visitor)) throw new ChatAccessError("error");
+    const csrf = await getCsrf(signal);
+    return { invite: null, visitor, csrf };
+  }
+  if (!code.trim()) throw new ChatAccessError("invalid");
   const response = await apiGet("/invite", signal, new URLSearchParams({ token: code }));
   if (!response.ok) {
     throw new ChatAccessError([400, 401, 403, 404, 409, 410].includes(response.status) ? "invalid" : "error");

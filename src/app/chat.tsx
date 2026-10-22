@@ -8,17 +8,19 @@ import ChatConversation from "@/components/chat-conversation";
 import { ApiError } from "@/lib/api";
 import ChatAccess from "@/components/chat-access";
 
-type AccessState = "checking" | "valid" | "invalid" | "ended" | "error";
+type AccessState = "checking" | "valid" | "invalid" | "ended" | "error" | "closed";
 
 export default function Chat() {
   const searchParams = useSearchParams();
-  const code = readInvitationCode(searchParams);
+  // Only a genuinely absent code enters as a guest. Malformed invitation links
+  // remain invalid rather than silently falling back to public access.
+  const code = searchParams.has("token") ? readInvitationCode(searchParams) ?? "" : null;
   return <InvitationChat code={code} />;
 }
 
 export function InvitationChat({ code }: { code: string | null }) {
   // A URL invitation code change must discard the previous validation and draft.
-  return <ChatSession key={code ?? "missing-code"} code={code} />;
+  return <ChatSession key={code ?? "guest"} code={code} />;
 }
 
 function ChatSession({ code }: { code: string | null }) {
@@ -27,7 +29,6 @@ function ChatSession({ code }: { code: string | null }) {
   const [session, setSession] = useState<Session | null>(null);
 
   useEffect(() => {
-    if (!code) return;
     const invitationCode = code;
     const controller = new AbortController();
     async function verify() {
@@ -38,43 +39,45 @@ function ChatSession({ code }: { code: string | null }) {
         setSession(preparedSession);
         setAccess("valid");
       } catch (error) {
-        if (!controller.signal.aborted) setAccess(error instanceof ChatAccessError ? error.reason : error instanceof ApiError && ["INVITATION_UNAVAILABLE", "INVALID_INVITATION_TOKEN"].includes(error.code) ? "invalid" : "error");
+        if (!controller.signal.aborted) {
+          setAccess(error instanceof ApiError && error.code === "GUEST_ACCESS_DISABLED" ? "closed"
+            : error instanceof ChatAccessError ? error.reason
+            : error instanceof ApiError && ["INVITATION_UNAVAILABLE", "INVALID_INVITATION_TOKEN"].includes(error.code) ? "invalid" : "error");
+        }
       }
     }
     void verify();
     return () => controller.abort();
   }, [code, attempt]);
 
-  if (!code || access !== "valid" || !session) {
-    const title = !code
+  if (access !== "valid" || !session) {
+    const title = access === "closed"
       ? "초대 링크로 접속해 주세요"
       : access === "ended"
         ? "대화 이용이 종료되었습니다"
       : access === "checking"
-        ? "초대 코드를 확인하고 있어요"
+        ? code === null ? "대화를 준비하고 있어요" : "초대 코드를 확인하고 있어요"
         : access === "invalid"
-          ? "사용할 수 없는 초대 코드예요"
-          : "초대 코드를 확인하지 못했어요";
-    const description = !code
-      ? "이력서에 첨부된 초대 링크로 접속해 주세요."
-      : access === "ended"
-        ? "초대 코드가 만료되었거나 폐기되었습니다. 새로운 초대 링크를 요청해 주세요."
+          ? code === null ? "지금은 대화를 이용할 수 없습니다" : "사용할 수 없는 초대 코드예요"
+          : code === null ? "대화를 준비하지 못했어요" : "초대 코드를 확인하지 못했어요";
+    const description = access === "ended"
+        ? code === null ? "지금은 대화를 이용할 수 없습니다. 나중에 다시 접속해 주세요." : "초대 코드가 만료되었거나 폐기되었습니다. 새로운 초대 링크를 요청해 주세요."
       : access === "checking"
-        ? "잠시만 기다려 주세요. 초대 코드를 확인하고 대화를 준비 중입니다."
+        ? "잠시만 기다려 주세요. 대화를 준비 중입니다."
         : access === "invalid"
-          ? "대화를 시작할 수 없는 초대 코드입니다. 새로운 초대 링크를 요청해 주세요."
+          ? code === null ? "나중에 다시 접속해 주세요." : "대화를 시작할 수 없는 초대 코드입니다. 새로운 초대 링크를 요청해 주세요."
           : "일시적으로 연결할 수 없습니다. 잠시 후 다시 시도해 주세요.";
     return (
       <ChatAccess
-        mode={!code ? "missing" : access === "valid" ? "checking" : access === "ended" ? "invalid" : access}
+        mode={access === "valid" ? "checking" : access === "ended" ? "invalid" : access}
         title={title}
         description={description}
-        onRetry={code && access === "error" ? () => { setAccess("checking"); setAttempt((value) => value + 1); } : undefined}
+        onRetry={access === "error" ? () => { setAccess("checking"); setAttempt((value) => value + 1); } : undefined}
       />
     );
   }
 
-  return <ChatConversation session={session} onAccessEnded={() => { setAccess("ended"); }} onNewConversation={() => {
+  return <ChatConversation session={session} onAccessEnded={(reason) => { setAccess(reason === "guest-disabled" ? "closed" : "ended"); }} onNewConversation={() => {
     setSession(null);
     setAccess("checking");
     setAttempt((value) => value + 1);

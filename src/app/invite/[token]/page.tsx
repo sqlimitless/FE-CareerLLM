@@ -14,5 +14,5 @@ export default function InvitePage({ params }: InvitePageProps) {
 
 async function InviteContent({ params }: InvitePageProps) {
   const { token } = await params;
-  return <InvitationChat code={token.trim() ? token : null} />;
+  return <InvitationChat code={token.trim() ? token : ""} />;
 }

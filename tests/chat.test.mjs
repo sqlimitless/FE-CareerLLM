@@ -118,6 +118,62 @@ test('chat API and SSE contracts', async (t) => {
         assert.equal(readInvitationCode(new URLSearchParams(query)), null);
       }
     });
+    await t.test('no code enters as a guest with CSRF rotation and no invitation preview', async () => {
+      const paths = [];
+      let csrfCalls = 0;
+      global.fetch = async (url, options) => {
+        paths.push(url.pathname);
+        assert.equal(options.credentials, 'include');
+        if (url.pathname === '/api/csrf') return Response.json(++csrfCalls === 1 ? { ...csrf, token: 'before-guest' } : csrf);
+        assert.equal(url.pathname, '/api/visitors/guest');
+        assert.equal(options.method, 'POST');
+        assert.equal(options.body, undefined);
+        assert.equal(options.headers.get(csrf.headerName), 'before-guest');
+        return Response.json({ ...visitor, companyName: '일반 방문자' });
+      };
+      const session = await prepareChatSession(null, signal());
+      assert.equal(session.invite, null);
+      assert.equal(session.visitor.companyName, '일반 방문자');
+      assert.deepEqual(session.csrf, csrf);
+      assert.deepEqual(paths, ['/api/csrf', '/api/visitors/guest', '/api/csrf']);
+    });
+    await t.test('invalid explicit code never falls back to guest and blank code makes no request', async () => {
+      let calls = 0;
+      global.fetch = async (url) => {
+        calls++;
+        assert.equal(url.pathname, '/invite');
+        return Response.json({ code: 'INVITATION_UNAVAILABLE' }, { status: 403 });
+      };
+      await assert.rejects(prepareChatSession('BAD-CODE', signal()), e => e.reason === 'invalid');
+      await assert.rejects(prepareChatSession('', signal()), e => e.reason === 'invalid');
+      assert.equal(calls, 1);
+    });
+    await t.test('guest entry rejects CSRF failure or invalid visitor before chat can start', async () => {
+      for (const body of [null, {}, { token: 'missing-header' }]) {
+        let calls = 0;
+        global.fetch = async () => { calls++; return Response.json(body); };
+        await assert.rejects(prepareChatSession(null, signal()));
+        assert.equal(calls, 1);
+      }
+      const responses = [Response.json(csrf), Response.json({ companyName: '일반 방문자' })];
+      global.fetch = async () => responses.shift();
+      await assert.rejects(prepareChatSession(null, signal()), e => e.reason === 'error');
+      assert.equal(responses.length, 0);
+      assert.match(chatErrorMessage(new ApiError('DAILY_TOKEN_LIMIT_EXCEEDED', 429)), /이용 한도/);
+    });
+    await t.test('disabled guest entry stops before chat and preserves the policy error', async () => {
+      const paths = [];
+      global.fetch = async url => {
+        paths.push(url.pathname);
+        return url.pathname === '/api/csrf' ? Response.json(csrf)
+          : Response.json({ code: 'GUEST_ACCESS_DISABLED' }, { status: 403 });
+      };
+      await assert.rejects(prepareChatSession(null, signal()), e => e.code === 'GUEST_ACCESS_DISABLED' && e.status === 403);
+      assert.deepEqual(paths, ['/api/csrf', '/api/visitors/guest']);
+      global.fetch = async () => Response.json({ code: 'GUEST_ACCESS_DISABLED' }, { status: 403 });
+      await assert.rejects(send(), e => e.code === 'GUEST_ACCESS_DISABLED');
+      assert.match(chatErrorMessage(new ApiError('GUEST_ACCESS_DISABLED')), /초대 링크/);
+    });
     await t.test('preview rejects invalid or unavailable invitations before accept', async () => {
       for (const [status, code] of [[400, 'INVALID_INVITATION_TOKEN'], [403, 'INVITATION_UNAVAILABLE']]) {
         let calls = 0;

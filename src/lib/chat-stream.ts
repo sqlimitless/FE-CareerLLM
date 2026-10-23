@@ -91,6 +91,8 @@ export function chatErrorMessage(error: unknown): string {
     ACCESS_DENIED: "요청을 확인하지 못했습니다. 다시 입장한 후 질문해 주세요.",
     INVALID_REQUEST: "질문은 공백을 제외하고 1~1,000자로 입력해 주세요.",
     CHAT_MESSAGE_TOO_LONG: "질문이 처리 가능한 범위를 넘었습니다. 조금 더 짧게 작성해 주세요.",
+    RATE_LIMITED: "요청이 너무 많습니다. 1분 후 다시 시도해 주세요.",
+    REQUEST_BODY_TOO_LARGE: "질문이 너무 큽니다. 내용을 줄여 다시 질문해 주세요.",
     CHAT_BUSY: "현재 요청이 많습니다. 잠시 후 다시 질문해 주세요.",
     DAILY_TOKEN_LIMIT_EXCEEDED: "오늘의 대화 이용 한도에 도달했습니다. 내일 다시 이용해 주세요.",
     GUEST_ACCESS_DISABLED: "일반 방문자 이용이 중단되었습니다. 초대 링크로 접속해 주세요.",

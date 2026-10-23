@@ -20,7 +20,7 @@ export default function Chat() {
 
 export function InvitationChat({ code }: { code: string | null }) {
   // A URL invitation code change must discard the previous validation and draft.
-  return <ChatSession key={code ?? "guest"} code={code} />;
+  return <ChatSession key={JSON.stringify(code)} code={code} />;
 }
 
 function ChatSession({ code }: { code: string | null }) {

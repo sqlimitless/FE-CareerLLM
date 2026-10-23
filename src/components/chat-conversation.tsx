@@ -65,7 +65,8 @@ export default function ChatConversation({ session, onNewConversation, onAccessE
         : [...current, pending];
     });
     setActiveTurnId(id);
-    setDraft("");
+    // Retrying an older turn must not discard a different question being drafted.
+    setDraft((current) => retry && current.trim() !== question ? current : "");
     setBusy(true);
     setStage("searching");
     try {
@@ -89,7 +90,7 @@ export default function ChatConversation({ session, onNewConversation, onAccessE
       }
       updateTurn({ provisional: "", error: controller.signal.aborted ? "답변 생성을 중지했습니다." : chatErrorMessage(error) });
       retryMessage.current = outgoing;
-      setDraft(question);
+      setDraft((current) => current || question);
       if (error instanceof ApiError && ["UNAUTHENTICATED", "ACCESS_DENIED", "CHAT_MESSAGE_ID_CONFLICT"].includes(error.code)) {
         setMustReenter(true);
       }
@@ -125,7 +126,7 @@ export default function ChatConversation({ session, onNewConversation, onAccessE
             {turns.map((turn) => <div key={turn.id} ref={turn.id === activeTurnId ? activeTurnRef : undefined} className="space-y-6">
               <div className="flex flex-col items-end"><div data-chat-message className="max-w-[88%] select-text whitespace-pre-wrap break-words rounded-2xl rounded-tr-sm bg-zinc-100 px-5 py-3.5 text-sm leading-7 text-zinc-900"><span className="sr-only">질문: </span>{turn.question}</div></div>
               <article className="text-sm leading-7 text-zinc-700" aria-label="AI 답변" aria-busy={!turn.reply && !turn.error}>
-                {turn.error ? <div role="alert" className="rounded-xl border border-red-100 bg-red-50 p-4 text-red-800"><p>{turn.error}</p><p className="mt-2 text-xs text-red-700">미완료 답변은 표시하지 않습니다. 질문은 입력창에 남겨두었습니다.</p>
+                {turn.error ? <div role="alert" className="rounded-xl border border-red-100 bg-red-50 p-4 text-red-800"><p>{turn.error}</p><p className="mt-2 text-xs text-red-700">미완료 답변은 표시하지 않습니다.</p>
                   {!mustReenter && <button type="button" disabled={busy} onClick={() => { void send(undefined, { clientMessageId: turn.id, question: turn.question }); }} className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-medium text-red-800 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"><ChatIcon name="refresh" className="size-3.5" />다시 시도</button>}
                 </div>
                   : <><p data-chat-message className="select-text whitespace-pre-wrap break-words">{turn.reply?.answer ?? turn.provisional}</p>
